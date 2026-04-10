@@ -1,1 +1,1 @@
-# Sistema-de-Gest-o-de-Farm-cia
+# Sistema de Gestão de Farmacia
