@@ -1,4 +1,5 @@
 import json
+import struct
 
 class Medicamento:
     def __init__(self, id, nome, preco, estoque):
@@ -32,8 +33,11 @@ class PojoOutputStream:
         print(f"Bytes totais: {len(corpo_mensagem)} bytes")
         
         if hasattr(self.stream, 'sendall'): # Se for Socket
-            self.stream.sendall(corpo_mensagem)
+            # Para socket, envia primeiro o tamanho (4 bytes) e depois o payload.
+            header = struct.pack('!I', len(corpo_mensagem))
+            self.stream.sendall(header + corpo_mensagem)
         else: # Se for arquivo ou sys.stdout
+            # Em arquivo/stdout textual, envia JSON em uma linha.
             self.stream.write(corpo_mensagem.decode('utf-8') + '\n')
 
 class PojoInputStream:
@@ -41,9 +45,29 @@ class PojoInputStream:
     def __init__(self, origem_stream):
         self.stream = origem_stream
 
+    def _recv_exato(self, total_bytes):
+        """Lê exatamente N bytes de um socket ou retorna b'' em EOF."""
+        chunks = []
+        bytes_lidos = 0
+
+        while bytes_lidos < total_bytes:
+            chunk = self.stream.recv(total_bytes - bytes_lidos)
+            if not chunk:
+                return b''
+            chunks.append(chunk)
+            bytes_lidos += len(chunk)
+
+        return b''.join(chunks)
+
     def ler(self):
         if hasattr(self.stream, 'recv'): # Se for Socket
-            data = self.stream.recv(4096)
+            # Lê cabeçalho de tamanho e depois o payload completo.
+            header = self._recv_exato(4)
+            if not header:
+                return []
+
+            tamanho_payload = struct.unpack('!I', header)[0]
+            data = self._recv_exato(tamanho_payload)
         elif hasattr(self.stream, 'read'): # Se for Arquivo
             data = self.stream.read()
         else:
@@ -51,4 +75,8 @@ class PojoInputStream:
             
         if not data:
             return []
+
+        if isinstance(data, str):
+            return json.loads(data)
+
         return json.loads(data.decode('utf-8'))
